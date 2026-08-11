@@ -1,7 +1,8 @@
 import Foundation
 
 /// A user-supplied API key already on the machine — an environment variable or a small JSON/plain-text
-/// config file — for providers with no companion CLI/app that stashes a credential (OpenRouter, Z.ai).
+/// config file — for providers with no companion CLI/app that stashes a credential (DeepSeek, MiniMax,
+/// OpenRouter, Z.ai).
 /// The full read / status / save / delete behavior lives here so each such provider is a thin wrapper
 /// over its own config paths, env-var names, and error messages instead of a line-for-line copy.
 ///

@@ -385,6 +385,7 @@ enum TotalSpendPalette {
         "antigravity": hex(0x4285F4),                        // Google blue
         "copilot": hex(0xA855F7),                            // Copilot purple
         "amp": hex(0xF34E3F),
+        "deepseek": hex(0x4D6BFE),                           // DeepSeek blue
         "factory": dynamic(light: 0x48484A, dark: 0xC7C7CC),
         "kimi": hex(0x0A66FF),
         "minimax": hex(0xF5433C),
