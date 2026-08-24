@@ -233,6 +233,9 @@ final class CursorUsageMapperTests: XCTestCase {
 final class CursorProviderTests: XCTestCase {
     func testModelCategoryDescriptorsMatchDashboardAndKeepStableIdentifiers() throws {
         let descriptors = CursorProvider().widgetDescriptors
+        XCTAssertEqual(Array(descriptors.prefix(4).map(\.id)), [
+            "cursor.usage", "cursor.auto", "cursor.api", "cursor.grokBot"
+        ])
 
         let totalUsage = try XCTUnwrap(descriptors.first { $0.id == "cursor.usage" })
         XCTAssertEqual(totalUsage.title, "Total Usage")

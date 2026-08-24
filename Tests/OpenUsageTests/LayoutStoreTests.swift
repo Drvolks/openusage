@@ -655,7 +655,7 @@ final class LayoutStoreTests: XCTestCase {
         ])
         // Cursor's spend tiles + usage trend are enabled, so they trail the live meters in declaration order.
         XCTAssertEqual(store.orderedSupportedMetrics(for: "cursor").map(\.id), [
-            "cursor.usage", "cursor.grokBot", "cursor.auto", "cursor.api", "cursor.onDemand", "cursor.requests",
+            "cursor.usage", "cursor.auto", "cursor.api", "cursor.grokBot", "cursor.onDemand", "cursor.requests",
             "cursor.credits", "cursor.trend", "cursor.today", "cursor.yesterday", "cursor.last30"
         ])
     }
@@ -679,7 +679,7 @@ final class LayoutStoreTests: XCTestCase {
             "grok.weekly", "grok.trend",
             "grok.payAsYouGo", "grok.today", "grok.yesterday", "grok.last30",
             // Cursor spend tiles + usage trend are enabled, joining its live meters in the default layout.
-            "cursor.usage", "cursor.grokBot", "cursor.auto", "cursor.api", "cursor.trend",
+            "cursor.usage", "cursor.auto", "cursor.api", "cursor.grokBot", "cursor.trend",
             "cursor.onDemand", "cursor.today", "cursor.yesterday", "cursor.last30"
         ]))
         XCTAssertFalse(store.isMetricEnabled("claude.sonnet"))

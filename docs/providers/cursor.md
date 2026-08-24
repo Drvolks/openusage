@@ -6,13 +6,13 @@ Tracks your Cursor plan usage using the login from the Cursor app.
 
 | Metric | Meaning |
 |---|---|
-| Credits | Credit balance left from grants and prepaid account balance |
 | Total Usage | Plan usage for the billing cycle (percent or dollars; included request count vs. cap on request-based Enterprise accounts) |
-| Grok Bot | Grok Bot weekly usage percent and reset countdown; enabled by default |
-| Requests | Optional copy of the included request count vs. cap for custom layouts |
 | Cursor Models | Usage percent for Cursor's own models, including Cursor Grok and Composer |
 | Other Models | Usage percent for other models |
+| Grok Bot | Grok Bot weekly usage percent and reset countdown; enabled by default |
 | Extra Usage | On-demand spend; user-scoped when available, otherwise the team aggregate; shown as a meter when Cursor returns a limit |
+| Requests | Optional copy of the included request count vs. cap for custom layouts |
+| Credits | Credit balance left from grants and prepaid account balance |
 
 When Cursor reports your plan name, OpenUsage shows it beside the provider name.
 
