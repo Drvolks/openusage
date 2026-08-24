@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.7.10-beta.2
+
+### New Features
+
+- Add Cursor Grok Bot usage and match dashboard model names ([#1134](https://github.com/robinebers/openusage/pull/1134)) by @robinebers
+
+### Bug Fixes
+
+- Order Cursor metrics as Total Usage, Cursor Models, Other Models, and Grok Bot by @robinebers
+- Hide Codex Session by default ([#1137](https://github.com/robinebers/openusage/pull/1137)) by @robinebers
+- Fix laggy screen transitions and Settings navigation ([#1136](https://github.com/robinebers/openusage/pull/1136)) by @robinebers
+- Restore Grok spend history from session ledgers ([#1135](https://github.com/robinebers/openusage/pull/1135)) by @robinebers
+- Keep daily activity and crash reporting enabled when extra analytics are disabled ([#1116](https://github.com/robinebers/openusage/pull/1116)) by @robinebers
+- Price Codex auto-review as GPT-5.6 Luna ([#1125](https://github.com/robinebers/openusage/pull/1125)) by @validatedev
+- Resolve grok-proxy pricing as Grok Build ([#1123](https://github.com/robinebers/openusage/pull/1123)) by @robinebers
+
+### Chores
+
+- Reduce scrolling update overhead ([#1111](https://github.com/robinebers/openusage/pull/1111)) by @davidarny
+- Update Sparkle from 2.9.5 to 2.9.6 ([#1128](https://github.com/robinebers/openusage/pull/1128)) by @app/dependabot
+- Update PostHog from 3.69.0 to 3.69.6 ([#1127](https://github.com/robinebers/openusage/pull/1127)) by @app/dependabot
+
+---
+
+### Changelog
+
+**Full Changelog**: [v0.7.10-beta.1...v0.7.10-beta.2](https://github.com/robinebers/openusage/compare/v0.7.10-beta.1...v0.7.10-beta.2)
+
+- [0b7653c](https://github.com/robinebers/openusage/commit/0b7653c5c63b45a53cfd87d8b83b7d3edb184db8) fix(cursor): order metrics as Total, Cursor, Other, and Grok by @robinebers
+- [90cf96a](https://github.com/robinebers/openusage/commit/90cf96aef10c639638f59be78c452bdf20546bb3) Hide Codex Session by default (#1137) by @robinebers
+- [505a0d8](https://github.com/robinebers/openusage/commit/505a0d895ae75d02656e0bd0ab0f6b737d590b60) Fix laggy screen transitions and Settings navigation (#1136) by @robinebers
+- [b948107](https://github.com/robinebers/openusage/commit/b9481075a9254fb52f7babc1008b7e5d37046b94) fix(grok): restore spend history from session ledgers (#1135) by @robinebers
+- [65324c6](https://github.com/robinebers/openusage/commit/65324c6c04c169cc8024f9ab47912dc3718b7027) feat(cursor): add Grok Bot usage and match dashboard model names (#1134) by @robinebers
+- [2270d5f](https://github.com/robinebers/openusage/commit/2270d5fbfef1eddbff9a28500e60e0261d784088) perf: reduce scrolling update overhead (#1111) by @davidarny
+- [35cc226](https://github.com/robinebers/openusage/commit/35cc2260a0cced44e087bf472dc4ad09e17be09e) Keep the daily active ping on when extra analytics are off (#1116) by @robinebers
+- [fa48600](https://github.com/robinebers/openusage/commit/fa4860091e82ce073b5a6d938c9297bae33fdb9a) chore(deps): bump github.com/sparkle-project/sparkle from 2.9.5 to 2.9.6 (#1128) by @app/dependabot
+- [8887f96](https://github.com/robinebers/openusage/commit/8887f9619cee9e5702614c7af1a06adb5346dde5) chore(deps): bump github.com/posthog/posthog-ios from 3.69.0 to 3.69.6 (#1127) by @app/dependabot
+- [99c2a6d](https://github.com/robinebers/openusage/commit/99c2a6d1652e2560d6eba03abbad1c0069a17d8f) fix(codex): price codex-auto-review as GPT-5.6 Luna from 2026-07-09 (#1125) by @validatedev
+- [70acd4f](https://github.com/robinebers/openusage/commit/70acd4f4e9cc79951d83f416295e22ef43b9696b) fix(pricing): alias grok-proxy to Grok Build (#1123) by @robinebers
+
 ## v0.7.10-beta.1
 
 ### Bug Fixes
