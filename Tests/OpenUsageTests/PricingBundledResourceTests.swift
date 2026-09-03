@@ -51,7 +51,9 @@ final class PricingBundledResourceTests: XCTestCase {
             ("grok-4-6-xhigh-fast", 4), ("kimi-k2p5", 0.6),
             ("kimi-k2.7-code", 0.95), ("kimi-k2p7", 0.95), ("kimi-k3-max", 3),
             ("claude-4.7-opus-high-thinking", 5), ("claude-4.7-opus-max-thinking-fast", 30),
-            ("glm-5.2-max", 1.4)
+            ("glm-5.2-max", 1.4), ("glm-5.3-max", 1.4),
+            ("claude-fable-5-1-thinking-high", 10),
+            ("grok-bot-default", 2), ("grok-bot-automation", 2), ("grok-bot-cua", 2)
         ]
         for (model, expected) in expectedInputRates {
             XCTAssertEqual(pricing.resolve(model: model)?.inputPerMillion, expected, model)
@@ -93,6 +95,33 @@ final class PricingBundledResourceTests: XCTestCase {
             XCTAssertEqual(pricing.resolve(model: variant), pricing.resolve(model: canonical), "wrong rates for '\(variant)'")
         }
         XCTAssertNil(pricing.supplement.canonicalName(for: "gemini-3-pro"))
+    }
+
+    /// Claude Fable 5.1: same $10/$50 input/output as Fable 5, but cache reads are $0.25/M
+    /// (0.025x). Cursor CSV slugs (`claude-fable-5-1-thinking-*`) and the Anthropic API id
+    /// (`claude-fable-5-1`) must not collapse into the Fable 5 catalog entry.
+    func testClaudeFable51PricingAndAliases() throws {
+        let pricing = Self.pricing
+        let fable51 = try XCTUnwrap(pricing.resolve(model: "claude-fable-5-1-thinking-high"))
+        XCTAssertEqual(fable51.inputPerMillion, 10.0)
+        XCTAssertEqual(fable51.cacheWritePerMillion, 12.5)
+        XCTAssertEqual(fable51.cacheReadPerMillion, 0.25)
+        XCTAssertEqual(fable51.outputPerMillion, 50.0)
+
+        for model in [
+            "claude-fable-5-1", "claude-fable-5.1", "claude-fable-5-1-thinking",
+            "claude-fable-5-1-thinking-low", "claude-fable-5-1-thinking-medium",
+            "claude-fable-5.1-thinking-xhigh", "claude-fable-5-1[1m]"
+        ] {
+            XCTAssertEqual(pricing.supplement.canonicalName(for: model), "claude-fable-5.1", model)
+            XCTAssertEqual(pricing.resolve(model: model), fable51, model)
+        }
+
+        let fable5 = try XCTUnwrap(pricing.resolve(model: "claude-fable-5"))
+        XCTAssertEqual(fable5.inputPerMillion, fable51.inputPerMillion)
+        XCTAssertEqual(fable5.outputPerMillion, fable51.outputPerMillion)
+        XCTAssertNotEqual(fable5.cacheReadPerMillion, fable51.cacheReadPerMillion)
+        XCTAssertEqual(pricing.supplement.canonicalName(for: "claude-fable-5-thinking-high"), "claude-fable-5")
     }
 
     /// Claude Fable 5 (carried over from the old manifest tests): priced at 2x standard Claude 4.8
@@ -196,6 +225,8 @@ final class PricingBundledResourceTests: XCTestCase {
             "Opus 4.8 (Auto)": "claude-opus-4-8",
             "Sonnet 5 (Auto Intelligence)": "claude-sonnet-5",
             "Fable 5 (Auto Balanced)": "claude-fable-5",
+            "Fable 5.1 (Auto Balanced)": "claude-fable-5.1",
+            "Claude Fable 5.1 (Auto)": "claude-fable-5.1",
             "Haiku 4.5 (Auto Cost)": "claude-haiku-4-5",
             "Composer 2.5 (Auto)": "composer-2.5",
             "Composer 2.5 Fast (Auto)": "composer-2.5-fast",
@@ -211,6 +242,7 @@ final class PricingBundledResourceTests: XCTestCase {
             "Gemini 3.6 Flash (Auto)": "gemini-3.6-flash",
             "Gemini 3.7 Flash (Auto Balanced)": "gemini-3.7-flash",
             "GLM 5.2 (Auto)": "glm-5.2",
+            "GLM 5.3 (Auto Intelligence)": "glm-5.3",
             "Kimi K3 (Auto Intelligence)": "kimi-k3"
         ]
         for (label, canonical) in expected {
@@ -278,6 +310,29 @@ final class PricingBundledResourceTests: XCTestCase {
         XCTAssertNil(pricing.estimatedCostDollars(model: "glm-5.2-bogus", tokens: outputOnly))
     }
 
+    /// GLM 5.3 has its own identity and Z.ai's published rates; its three supported effort levels
+    /// and provider-prefixed API identifiers all resolve to that same distinct model.
+    func testGLM53PricingAndAliases() throws {
+        let pricing = Self.pricing
+        let glm = try XCTUnwrap(pricing.resolve(model: "glm-5.3"))
+        XCTAssertEqual(glm.inputPerMillion, 1.4)
+        XCTAssertEqual(glm.cacheWritePerMillion, 1.4)
+        XCTAssertEqual(glm.cacheReadPerMillion, 0.26)
+        XCTAssertEqual(glm.outputPerMillion, 4.4)
+
+        for model in [
+            "glm-5.3-low", "glm-5.3-high", "glm-5.3-max",
+            "z-ai/glm-5.3", "zai/glm-5.3-max", "ZHIPU/GLM-5.3"
+        ] {
+            XCTAssertEqual(pricing.supplement.canonicalName(for: model), "glm-5.3", model)
+            XCTAssertEqual(pricing.resolve(model: model), glm, model)
+        }
+
+        let outputOnly = TokenBreakdown(output: 1_000_000)
+        XCTAssertEqual(pricing.estimatedCostDollars(model: "glm-5.3-low", tokens: outputOnly)!, 4.4, accuracy: 1e-9)
+        XCTAssertNil(pricing.estimatedCostDollars(model: "glm-5.3-medium", tokens: outputOnly))
+    }
+
     /// Grok CLI model ids route through the alias rules to their catalog entries.
     func testGrokCLIModelAliases() {
         let pricing = Self.pricing
@@ -320,6 +375,12 @@ final class PricingBundledResourceTests: XCTestCase {
             }
             XCTAssertEqual(pricing.supplement.canonicalName(for: "cursor-grok-\(version)-high"), "grok-\(version)")
             XCTAssertEqual(pricing.supplement.canonicalName(for: "cursor-grok-\(version)-high-fast"), "grok-\(version)-fast")
+        }
+
+        let grok46 = try XCTUnwrap(pricing.resolve(model: "grok-4.6"))
+        for bot in ["grok-bot-automation", "grok-bot-cua", "grok-bot-default"] {
+            XCTAssertEqual(pricing.supplement.canonicalName(for: bot), "grok-4.6", bot)
+            XCTAssertEqual(pricing.resolve(model: bot), grok46, bot)
         }
     }
 
