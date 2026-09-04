@@ -39,9 +39,13 @@ final class OllamaProvider: ProviderRuntime {
             // Ollama reports recent spend as a single rolling four-week total, not a daily history, so
             // this is one unbounded dollar row rather than the Today/Yesterday/Last 30 Days tiles the
             // local-scanner providers ship.
+            //
+            // Deliberately not `isUsagePeriod`: that marks a row where $0.00 means nothing was used, and
+            // this row counts charges *beyond* the plan. A subscriber can run Ollama hard all month and
+            // still sit at $0.00, so the "No usage in this period" hover would be plainly wrong.
             .values(id: "ollama.last4Weeks", provider: provider, title: "Last 4 Weeks",
                     metricLabel: "Last 4 Weeks", selection: .kind(.dollars),
-                    valueWord: "spent", isUsagePeriod: true)
+                    valueWord: "spent")
         ]
     }
 
@@ -69,14 +73,27 @@ final class OllamaProvider: ProviderRuntime {
         // The usage endpoint is required; the account endpoint is best-effort (plan name only), so a
         // failure there must not blank out the meters.
         let usage = await load { try await usageClient.fetchUsage(key: key) }
-        let account = await loadOptional { try await usageClient.fetchAccount(key: key) }
+        let account = await loadAccount { try await usageClient.fetchAccount(key: key) }
+
+        var accountBody: Data?
+        var warning: String?
+        switch account {
+        case .success(let body):
+            accountBody = body
+        case .failure(let error):
+            // Best-effort does not mean invisible: without this, a persistently failing plan lookup just
+            // looks like an account that has no plan. Log it and carry an amber notice so the missing
+            // badge is explained, while the meters below still refresh normally.
+            AppLog.warn(.refresh, "ollama plan lookup failed (\(error.errorCategory.rawValue)); meters unaffected")
+            warning = "Couldn't read your Ollama plan. Usage below is still up to date."
+        }
 
         switch usage {
         case .success(let body):
             do {
-                let mapped = try OllamaUsageMapper.map(usageBody: body, accountBody: account)
+                let mapped = try OllamaUsageMapper.map(usageBody: body, accountBody: accountBody)
                 return ProviderSnapshot.make(provider: provider, plan: mapped.plan, lines: mapped.lines,
-                                             refreshedAt: now())
+                                             refreshedAt: now(), warning: warning)
             } catch {
                 return ProviderSnapshot.error(provider: provider, error: error)
             }
@@ -104,15 +121,18 @@ final class OllamaProvider: ProviderRuntime {
         }
     }
 
-    /// Run the optional account call — never throws into the snapshot: a transport error, a non-2xx, or
-    /// an auth failure all just mean "no plan name this refresh".
-    private func loadOptional(_ call: () async throws -> HTTPResponse) async -> Data? {
+    /// Run the best-effort account call. It never throws into the snapshot — a transport error or a
+    /// non-2xx just means "no plan name this refresh" — but it returns *why* so the caller can log the
+    /// failure and warn, rather than letting it disappear.
+    private func loadAccount(_ call: () async throws -> HTTPResponse) async -> Result<Data, OllamaUsageError> {
         do {
             let response = try await call()
-            guard (200..<300).contains(response.statusCode) else { return nil }
-            return response.body
+            guard (200..<300).contains(response.statusCode) else {
+                return .failure(.requestFailed(response.statusCode))
+            }
+            return .success(response.body)
         } catch {
-            return nil
+            return .failure(.connectionFailed)
         }
     }
 }

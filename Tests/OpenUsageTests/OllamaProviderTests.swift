@@ -17,6 +17,18 @@ private func ok(_ json: String) -> HTTPResponse {
     HTTPResponse(statusCode: 200, headers: [:], body: data(json))
 }
 
+/// Answers per request path, so the required usage call and the best-effort account call can have
+/// different outcomes — the case a single canned `FakeHTTPClient` response cannot express.
+private final class RoutedHTTPClient: HTTPClient, @unchecked Sendable {
+    private let responses: [String: HTTPResponse]
+
+    init(_ responses: [String: HTTPResponse]) { self.responses = responses }
+
+    func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+        responses[request.url.path] ?? HTTPResponse(statusCode: 404, headers: [:], body: Data())
+    }
+}
+
 /// Builds an unencrypted OpenSSH ed25519 private key in memory, so no key material is ever committed
 /// to the repository (a hardcoded PEM is a real private key as far as any secret scanner is concerned,
 /// throwaway or not). Mirrors the container OpenSSH documents in `PROTOCOL.key`:
@@ -27,11 +39,14 @@ private func ok(_ json: String) -> HTTPResponse {
 /// Generating it per run also makes the parser tests stronger than a fixture would: they prove a real
 /// round-trip rather than that one frozen blob still parses.
 private enum TestSigningKey {
-    static func make() -> (pem: String, publicKeyRaw: Data) {
+    /// `declaredPublicKey` overrides the container's outer public key — the half sent in the
+    /// `Authorization` header — without touching the private half, reproducing the damaged file that
+    /// signs correctly but identifies the wrong account.
+    static func make(declaredPublicKey: Data? = nil) -> (pem: String, publicKeyRaw: Data) {
         let privateKey = Curve25519.Signing.PrivateKey()
         let seed = privateKey.rawRepresentation
         let publicKeyRaw = privateKey.publicKey.rawRepresentation
-        let publicKeyBlob = string("ssh-ed25519") + string(publicKeyRaw)
+        let publicKeyBlob = string("ssh-ed25519") + string(declaredPublicKey ?? publicKeyRaw)
 
         var privateSection = uint32(0x1234_5678) + uint32(0x1234_5678)  // matching checkints
         privateSection += string("ssh-ed25519")
@@ -88,6 +103,17 @@ final class OpenSSHEd25519KeyTests: XCTestCase {
         // The seed round-trips too: it must derive the same public key.
         let derived = try Curve25519.Signing.PrivateKey(rawRepresentation: key.seed)
         XCTAssertEqual(derived.publicKey.rawRepresentation, testKey.publicKeyRaw)
+    }
+
+    /// Regression: the outer public key is what the `Authorization` header carries, while the signature
+    /// comes from the seed. A file pairing an intact private key with a foreign public half used to parse
+    /// fine, then get rejected by ollama.com as "not signed in" — a dead end the user cannot fix by
+    /// signing in again.
+    func testRejectsKeyWhoseDeclaredPublicHalfDoesNotMatchItsPrivateHalf() {
+        let foreign = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+        let damaged = TestSigningKey.make(declaredPublicKey: foreign)
+
+        XCTAssertNil(OpenSSHEd25519Key.parse(pem: damaged.pem))
     }
 
     func testRejectsMalformedAndTruncatedKeys() {
@@ -302,7 +328,45 @@ final class OllamaProviderRefreshTests: XCTestCase {
         XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly", "Last 4 Weeks"])
     }
 
-    private func makeProvider(http: FakeHTTPClient) -> OllamaProvider {
+    /// Regression: a failing plan lookup used to be indistinguishable from an account that simply has
+    /// no plan. The meters must still refresh, but the failure has to be visible.
+    func testFailedPlanLookupWarnsAndKeepsTheMeters() async {
+        let provider = makeProvider(http: RoutedHTTPClient([
+            OllamaUsageClient.usagePath: ok(usageJSON),
+            OllamaUsageClient.accountPath: HTTPResponse(statusCode: 500, headers: [:], body: Data())
+        ]))
+
+        let snapshot = await provider.refresh()
+
+        XCTAssertNil(snapshot.errorCategory)
+        XCTAssertNil(snapshot.plan)
+        XCTAssertNotNil(snapshot.warning)
+        XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly", "Last 4 Weeks"])
+    }
+
+    func testSuccessfulPlanLookupCarriesNoWarning() async {
+        let provider = makeProvider(http: RoutedHTTPClient([
+            OllamaUsageClient.usagePath: ok(usageJSON),
+            OllamaUsageClient.accountPath: ok(accountJSON)
+        ]))
+
+        let snapshot = await provider.refresh()
+
+        XCTAssertEqual(snapshot.plan, "Pro")
+        XCTAssertNil(snapshot.warning)
+    }
+
+    /// The spend row counts charges beyond the plan, so $0.00 does not mean an idle period. Marking it
+    /// as a usage period would give it the "No usage in this period" hover, which would be wrong for a
+    /// subscriber who used Ollama heavily inside their allowance.
+    func testSpendRowIsNotMarkedAsAUsagePeriod() {
+        let descriptors = OllamaProvider().widgetDescriptors
+        let spend = descriptors.first { $0.id == "ollama.last4Weeks" }
+
+        XCTAssertEqual(spend?.sample.isUsagePeriod, false)
+    }
+
+    private func makeProvider(http: any HTTPClient) -> OllamaProvider {
         OllamaProvider(
             authStore: OllamaAuthStore(files: FakeFiles([OllamaAuthStore.keyPath: testPrivateKeyPEM])),
             usageClient: OllamaUsageClient(http: http, now: { Date(timeIntervalSince1970: 0) })

@@ -9,12 +9,13 @@ shows on its own settings page.
 |---|---|
 | Session | 5-hour window usage (percentage of your plan's allowance) |
 | Weekly | 7-day window usage (percentage of your plan's allowance) |
-| Last 4 Weeks | Recent activity spend. $0.00 on a subscription; real amounts for pay-as-you-go and API-key usage |
+| Last 4 Weeks | Charges beyond your plan over the last four weeks. $0.00 on a subscription; real amounts for pay-as-you-go and API-key usage |
 
 Your plan (Free, Pro, Max) is shown beside the provider name.
 
 Session and Weekly are always visible and start pinned to the menu bar. Last 4 Weeks sits behind the
-provider's caret — you can move any of them in **Customize**.
+provider's caret — you can move any of them in **Customize**. A $0.00 on that row means no extra charges,
+not an idle month: everything inside your plan's allowance is already counted by Session and Weekly.
 
 The session window is 5 hours and the weekly window is 7 days, but Ollama reports only how much of each
 window you have used — never when the current one started or ends. These meters therefore show no reset
@@ -40,6 +41,10 @@ ollama signin
 ```
 
 3. Ollama appears on the dashboard on the next refresh, with Session and Weekly in the menu bar.
+
+If Ollama doesn't appear, turn it on in **Customize**. OpenUsage checks for each provider once — on a
+fresh install, or on the first launch after that provider ships — so if Ollama wasn't installed yet when
+that check ran, installing it and signing in later won't switch it on by itself.
 
 ## Under the hood
 

@@ -54,6 +54,19 @@ enum OpenSSHEd25519Key {
             return nil
         }
 
+        // The outer public key is the one sent in the `Authorization` header, while the signature comes
+        // from `seed`. A damaged file can pair an intact private key with a different public half; every
+        // request would then be signed correctly, rejected by ollama.com, and reported to the user as
+        // "not signed in" — a dead end, since signing in again cannot fix a corrupt key file. Checking
+        // the two halves against each other here turns that into an honest "unusable key" instead.
+        var publicReader = ByteReader(publicKeyBlob, offset: 0)
+        guard let publicType = publicReader.string(), publicType == Data(keyType.utf8),
+              let publicKeyRaw = publicReader.string(),
+              publicKeyRaw == derived.publicKey.rawRepresentation
+        else {
+            return nil
+        }
+
         return OllamaSigningKey(publicKeyBase64: publicKeyBlob.base64EncodedString(), seed: Data(seed))
     }
 
