@@ -27,9 +27,10 @@ Nothing to paste. Ollama creates a signing key at `~/.ollama/id_ed25519` the fir
 `ollama signin` links that key to your ollama.com account. OpenUsage reads the key, signs each request
 with it exactly as the Ollama CLI does, and never sends the key anywhere — only the signature goes out.
 
-Because the key exists whether or not you've signed in, OpenUsage can only tell that Ollama is
-installed, not that Ollama Cloud is set up. If a first launch turns Ollama on for a local-only install,
-the card explains that you aren't signed in; turn it off in **Customize** if you don't use the cloud.
+Because that key exists whether or not you've signed in, OpenUsage can tell only that Ollama is
+installed — not that Ollama Cloud is set up. So Ollama never switches itself on, even when the key is
+there: if you use Ollama for local models alone, it stays out of your way instead of showing you a
+sign-in warning for a product you don't use. Turn it on in **Customize** when you want it.
 
 ## Setup
 
@@ -40,11 +41,9 @@ the card explains that you aren't signed in; turn it off in **Customize** if you
 ollama signin
 ```
 
-3. Ollama appears on the dashboard on the next refresh, with Session and Weekly in the menu bar.
+3. Turn **Ollama** on in **Customize** — unlike most providers, it never enables itself (see above).
 
-If Ollama doesn't appear, turn it on in **Customize**. OpenUsage checks for each provider once — on a
-fresh install, or on the first launch after that provider ships — so if Ollama wasn't installed yet when
-that check ran, installing it and signing in later won't switch it on by itself.
+Session and Weekly then appear on the dashboard and in the menu bar on the next refresh.
 
 ## Under the hood
 

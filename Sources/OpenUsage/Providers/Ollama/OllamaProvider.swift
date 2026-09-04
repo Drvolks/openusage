@@ -49,15 +49,16 @@ final class OllamaProvider: ProviderRuntime {
         ]
     }
 
-    func hasLocalCredentials() async -> Bool {
-        // Same source as `refresh()`: the Ollama signing key at `~/.ollama/id_ed25519`. Ollama writes
-        // that key on first run, so this answers "Ollama is set up on this Mac" — whether the key is
-        // linked to an ollama.com account is only knowable from the network, which a probe must not do.
-        // A local-only install therefore enables the provider once and then shows the "Not signed in to
-        // Ollama Cloud" notice, which is the honest state rather than a silently missing provider.
-        let key = try? await loadOffMainActor { [authStore] in try authStore.loadSigningKey() }
-        return (key ?? nil) != nil
-    }
+    /// Ollama is opt-in: it never enables itself, so the user turns it on in Customize.
+    ///
+    /// This is the one provider whose local credential cannot answer the question the probe is asking.
+    /// Ollama writes `~/.ollama/id_ed25519` the first time it runs, long before — and whether or not —
+    /// `ollama signin` ever links it to an ollama.com account, and only the network knows whether that
+    /// link exists. Probing the key would therefore auto-enable Ollama for everyone who runs local
+    /// models, handing them a provider card whose entire content is a Cloud sign-in warning for a
+    /// product they don't use. Reporting no credentials is the honest answer to "is Ollama Cloud set up
+    /// here?", and it costs a Cloud subscriber one visit to Customize.
+    func hasLocalCredentials() async -> Bool { false }
 
     func refresh() async -> ProviderSnapshot {
         let key: OllamaSigningKey?

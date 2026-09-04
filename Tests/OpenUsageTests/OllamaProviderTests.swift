@@ -286,10 +286,8 @@ final class OllamaProviderRefreshTests: XCTestCase {
 
         let snapshot = await provider.refresh()
 
-        let hasCredentials = await provider.hasLocalCredentials()
         XCTAssertTrue(http.requests.isEmpty)
         XCTAssertEqual(snapshot.errorCategory, .notLoggedIn)
-        XCTAssertFalse(hasCredentials)
     }
 
     func testUnauthorizedUsageReportsSignInRatherThanAnHTTPError() async {
@@ -298,12 +296,8 @@ final class OllamaProviderRefreshTests: XCTestCase {
 
         let snapshot = await provider.refresh()
 
-        let hasCredentials = await provider.hasLocalCredentials()
         XCTAssertEqual(snapshot.errorCategory, .notLoggedIn)
         XCTAssertEqual(snapshot.lines.first?.label, MetricLine.errorBadgeLabel)
-        // The key is on disk and parses, so the provider stays enabled — only the network knows it
-        // isn't linked to an account.
-        XCTAssertTrue(hasCredentials)
     }
 
     func testServerErrorSurfacesAsAnHTTPFailure() async {
@@ -326,6 +320,17 @@ final class OllamaProviderRefreshTests: XCTestCase {
         XCTAssertNil(snapshot.plan)
         XCTAssertNil(snapshot.errorCategory)
         XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly", "Last 4 Weeks"])
+    }
+
+    /// Ollama is opt-in: the signing key exists from Ollama's first run, so probing it would auto-enable
+    /// the provider for every local-models user and greet them with a Cloud sign-in warning. The probe
+    /// must stay false even when a perfectly good key is on disk.
+    func testProviderIsOptInEvenWithAUsableKeyOnDisk() async {
+        let provider = makeProvider(http: FakeHTTPClient(response: ok(usageJSON)))
+
+        let hasCredentials = await provider.hasLocalCredentials()
+
+        XCTAssertFalse(hasCredentials)
     }
 
     /// Regression: a failing plan lookup used to be indistinguishable from an account that simply has
