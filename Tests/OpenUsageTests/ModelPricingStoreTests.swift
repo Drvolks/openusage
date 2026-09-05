@@ -82,6 +82,30 @@ final class ModelPricingStoreTests: XCTestCase {
         XCTAssertEqual(pricing.resolve(model: "auto")?.inputPerMillion, 1.25)
     }
 
+    func testNewerLegacyFeedKeepsBundledFallbackChoices() async throws {
+        try Data("""
+        {"updated_at": "2099-01-01T00:00:00Z", "pricing": {}, "alias_rules": []}
+        """.utf8).write(to: tempDir.appendingPathComponent("supplement.json"))
+        let store = ModelPricingStore(
+            http: RoutingHTTPClient(handler: { _ in throw URLError(.notConnectedToInternet) }),
+            cacheDirectory: tempDir,
+            bundledData: { name in
+                if name == "pricing_supplement" {
+                    return Data("""
+                    {"updated_at": "2026-08-01T00:00:00Z", "pricing": {}, "alias_rules": [],
+                     "fallback_models": {"codex": ["gpt-5.6-sol"]}}
+                    """.utf8)
+                }
+                return Self.bundledFixtures(name)
+            }
+        )
+
+        let pricing = await store.current()
+        XCTAssertEqual(pricing.supplement.updatedAt, "2099-01-01T00:00:00Z")
+        XCTAssertEqual(pricing.supplement.fallbackModels["codex"], ["gpt-5.6-sol"])
+        await store.refreshNow()
+    }
+
     func testRefreshFetchesAllSourcesAndAppliesData() async throws {
         let (store, http) = makeStore(handler: { Self.respond(to: $0) })
         await store.refreshNow()
@@ -92,6 +116,48 @@ final class ModelPricingStoreTests: XCTestCase {
         XCTAssertEqual(pricing.resolve(model: "fetched-dev-model")?.inputPerMillion, 1)
         XCTAssertEqual(pricing.resolve(model: "auto")?.inputPerMillion, 9, "fetched supplement replaces bundled")
         XCTAssertEqual(pricing.resolve(model: "bundled-model")?.inputPerMillion, 1, "bundled entries survive the merge")
+    }
+
+    func testFeedRemovingSelectedFallbackRequestsRecalculationAndExcludesItsEstimates() async throws {
+        let reference = "gpt-5.6-sol"
+        let store = ModelPricingStore(
+            http: RoutingHTTPClient(handler: { _ in
+                HTTPResponse(statusCode: 200, headers: [:], body: Data("""
+                {"updated_at":"2099-01-01", "pricing":{}, "alias_rules":[], "fallback_models":{"codex":[]}}
+                """.utf8))
+            }),
+            cacheDirectory: tempDir,
+            sourceURLs: [.supplement: URL(string: "https://example.com/supplement.json")!],
+            bundledData: { name in
+                guard name == "pricing_supplement" else { return Self.bundledFixtures(name) }
+                return Data("""
+                {"updated_at":"2026-08-01", "alias_rules":[], "fallback_models":{"codex":["gpt-5.6-sol"]},
+                 "pricing":{"gpt-5.6-sol":{"input_per_million":5,"output_per_million":30}}}
+                """.utf8)
+            }
+        )
+        let event = CodexLogUsageScanner.Event(
+            timestamp: Date(), model: "unlisted-model-a", input: 1_000, cached: 0, output: 100,
+            reasoning: 0, total: 1_100, isFast: false
+        )
+        var refreshState = CodexFallbackPricingRefreshState()
+        let initial = await store.current()
+        XCTAssertTrue(refreshState.update(model: reference, options: initial.fallbackOptions(for: "codex")))
+        let estimated = CodexLogUsageScanner.aggregate(
+            events: [event], since: .distantPast, pricing: initial, fallbackModel: reference
+        )
+        XCTAssertEqual(try XCTUnwrap(estimated.series.daily.first?.costUSD), 0.008, accuracy: 0.000_001)
+
+        await store.refreshNow()
+        let refreshed = await store.current()
+        XCTAssertTrue(refreshed.fallbackOptions(for: "codex").isEmpty)
+        XCTAssertTrue(refreshState.update(model: reference, options: refreshed.fallbackOptions(for: "codex")))
+        let recalculated = CodexLogUsageScanner.aggregate(
+            events: [event], since: .distantPast, pricing: refreshed, fallbackModel: reference
+        )
+        XCTAssertTrue(recalculated.series.daily.isEmpty)
+        XCTAssertNil(recalculated.fallbackPricingModelsByDay)
+        XCTAssertEqual(recalculated.unknownModelsByDay, estimated.unknownModelsByDay)
     }
 
     func testCachePersistsAcrossStoreInstances() async throws {
@@ -154,36 +220,20 @@ final class ModelPricingStoreTests: XCTestCase {
         XCTAssertEqual(pricing.resolve(model: "fetched-model")?.inputPerMillion, 5)
     }
 
-    /// An app update ships a newer bundled supplement while the cache from the previous version is
-    /// still on disk. The shipped rates must win until the feed catches up — otherwise a fix that
-    /// merged and shipped stays invisible, permanently for anyone who can't reach the feed.
-    func testNewerBundledSupplementBeatsOlderCache() async throws {
-        try writeSupplementCache(updatedAt: "2026-01-01", autoInput: 9)
+    func testSupplementSelectionPrefersTheMostRecentDatedSource() async throws {
+        let scenarios: [(name: String, bundled: String?, cached: String?, expected: Double)] = [
+            ("newer bundle", "2026-06-01", "2026-01-01", 4),
+            ("same-day precise bundle", "2026-08-11T07:01:30Z", "2026-08-11", 4),
+            ("newer cache", "2026-01-01", "2026-06-01", 9),
+            ("undated cache", "2026-06-01", nil, 4),
+            ("undated bundle", nil, "2026-06-01", 9)
+        ]
 
-        let store = makeStoreWithBundledSupplement(updatedAt: "2026-06-01", autoInput: 4)
-        let pricing = await store.current()
-        XCTAssertEqual(pricing.resolve(model: "auto")?.inputPerMillion, 4)
-    }
-
-    /// The usual case: the feed runs ahead of the shipped file, so the cache keeps winning.
-    func testNewerCachedSupplementBeatsOlderBundled() async throws {
-        try writeSupplementCache(updatedAt: "2026-06-01", autoInput: 9)
-
-        let store = makeStoreWithBundledSupplement(updatedAt: "2026-01-01", autoInput: 4)
-        let pricing = await store.current()
-        XCTAssertEqual(pricing.resolve(model: "auto")?.inputPerMillion, 9)
-    }
-
-    /// An undated file never displaces a dated one, in either direction.
-    func testUndatedSupplementNeverDisplacesDatedOne() async throws {
-        try writeSupplementCache(updatedAt: nil, autoInput: 9)
-
-        let datedBundle = await makeStoreWithBundledSupplement(updatedAt: "2026-06-01", autoInput: 4).current()
-        XCTAssertEqual(datedBundle.resolve(model: "auto")?.inputPerMillion, 4)
-
-        try writeSupplementCache(updatedAt: "2026-06-01", autoInput: 9)
-        let undatedBundle = await makeStoreWithBundledSupplement(updatedAt: nil, autoInput: 4).current()
-        XCTAssertEqual(undatedBundle.resolve(model: "auto")?.inputPerMillion, 9)
+        for scenario in scenarios {
+            try writeSupplementCache(updatedAt: scenario.cached, autoInput: 9)
+            let pricing = await makeStoreWithBundledSupplement(updatedAt: scenario.bundled, autoInput: 4).current()
+            XCTAssertEqual(pricing.resolve(model: "auto")?.inputPerMillion, scenario.expected, scenario.name)
+        }
     }
 
     private static func supplementJSON(updatedAt: String?, autoInput: Double) -> String {

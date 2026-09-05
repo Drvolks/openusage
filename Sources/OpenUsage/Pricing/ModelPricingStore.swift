@@ -114,7 +114,8 @@ actor ModelPricingStore {
         case (let cached?, let bundled?):
             // Bundled wins only when strictly newer, so the usual case (a feed ahead of the shipped
             // file, or the two in step) keeps serving the cache.
-            return Self.isNewer(bundled.updatedAt, than: cached.updatedAt) ? bundled : cached
+            let preferred = Self.isNewer(bundled.updatedAt, than: cached.updatedAt) ? bundled : cached
+            return preferred.fillingMissingFallbackModels(from: bundled)
         case (let cached?, nil):
             return cached
         case (nil, let bundled?):
@@ -124,8 +125,9 @@ actor ModelPricingStore {
         }
     }
 
-    /// `updated_at` is a zero-padded ISO date, so lexicographic order is chronological. A missing
-    /// date counts as oldest — an undated file never displaces a dated one.
+    /// `updated_at` is a zero-padded ISO-8601 timestamp, so lexicographic order is chronological.
+    /// Legacy date-only values remain comparable and sort before a timestamp from the same day.
+    /// A missing value counts as oldest — an undated file never displaces a dated one.
     private static func isNewer(_ lhs: String?, than rhs: String?) -> Bool {
         guard let lhs else { return false }
         guard let rhs else { return true }
